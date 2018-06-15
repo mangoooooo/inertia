@@ -7,24 +7,30 @@
  */
 
 (function (global, factory) {
-    if (typeof define === 'function' && (define.amd || define.cmd)) {
+    if (typeof define === "function" && (define.amd || define.cmd)) {
         define(factory);
+    } else if (typeof exports === "object" && typeof module !== "undefined") {
+        module.exports = factory();
+    } else if (typeof exports === 'object') {
+        exports["Inertia"] = factory()
     } else {
         global.Inertia = factory();
     }
-}(this, function () {
-    'use strict';
+})(typeof window !== 'undefined' ? window : global, function () {
+    "use strict";
 
-    var Inertia = function (ele, options) {
+    var Inertia = function (ele, options, wrapper) {
         var defaults = {
             // 是否吸附边缘
-            edge: true
+            edge: true,
+            //  是否停留在上次位置
+            savePosition: false
         };
 
         var params = {};
         options = options || {};
         for (var key in defaults) {
-            if (typeof options[key] !== 'undefined') {
+            if (typeof options[key] !== "undefined") {
                 params[key] = options[key];
             } else {
                 params[key] = defaults[key];
@@ -36,11 +42,11 @@
             distanceY: 0
         };
 
-        var win = window;
+        var win = wrapper || window;
 
         // 浏览器窗体尺寸
-        var winWidth = win.innerWidth;
-        var winHeight = win.innerHeight;
+        var winWidth = win.innerWidth || wrapper.clientWidth;
+        var winHeight = win.innerHeight || wrapper.clientHeight;
 
         if (!ele) {
             return;
@@ -51,38 +57,63 @@
             x = Math.round(1000 * x) / 1000;
             y = Math.round(1000 * y) / 1000;
 
-            ele.style.webkitTransform = 'translate(' + [x + 'px', y + 'px'].join(',') + ')';
-            ele.style.transform = 'translate3d(' + [x + 'px', y + 'px', 0].join(',') + ')';
+            ele.style.webkitTransform = "translate(" + [x + "px", y + "px"].join(",") + ")";
+            ele.style.transform = "translate3d(" + [x + "px", y + "px", 0].join(",") + ")";
         };
 
-        var strStoreDistance = '';
+        var strStoreDistance = "";
         // 居然有android机子不支持localStorage
-        if (ele.id && win.localStorage && (strStoreDistance = localStorage['Inertia_' + ele.id])) {
-            var arrStoreDistance = strStoreDistance.split(',');
+        if ( ele.id && params.savePosition && win.localStorage && (strStoreDistance = localStorage["Inertia_" + ele.id])) {
+            var arrStoreDistance = strStoreDistance.split(",");
             ele.distanceX = +arrStoreDistance[0];
             ele.distanceY = +arrStoreDistance[1];
             fnTranslate(ele.distanceX, ele.distanceY);
         }
 
         // 显示拖拽元素
-        ele.style.visibility = 'visible';
+        ele.style.visibility = "visible";
 
         // 如果元素在屏幕之外，位置使用初始值
         var initBound = ele.getBoundingClientRect();
 
-        if (initBound.left < -0.5 * initBound.width ||
-            initBound.top < -0.5 * initBound.height ||
-            initBound.right > winWidth + 0.5 * initBound.width ||
-            initBound.bottom > winHeight + 0.5 * initBound.height
-            ) {
+        if ( initBound.left < -0.5 * initBound.width || initBound.top < -0.5 * initBound.height || initBound.right > winWidth + 0.5 * initBound.width || initBound.bottom > winHeight + 0.5 * initBound.height) {
             ele.distanceX = 0;
             ele.distanceY = 0;
             fnTranslate(0, 0);
         }
 
-        ele.addEventListener('touchstart', function (event) {
+        ele.addEventListener("touchstart", eleTouchStartHandler);
+
+        // easeOutBounce算法
+        /*
+        * t: current time（当前时间）；
+         * b: beginning value（初始值）；
+         * c: change in value（变化量）；
+         * d: duration（持续时间）。
+        **/
+        var easeOutBounce = function (t, b, c, d) {
+            if ((t /= d) < 1 / 2.75) {
+                return c * (7.5625 * t * t) + b;
+            } else if (t < 2 / 2.75) {
+                return c * (7.5625 * (t -= 1.5 / 2.75) * t + 0.75) + b;
+            } else if (t < 2.5 / 2.75) {
+                return c * (7.5625 * (t -= 2.25 / 2.75) * t + 0.9375) + b;
+            } else {
+                return c * (7.5625 * (t -= 2.625 / 2.75) * t + 0.984375) + b;
+            }
+        };
+
+        wrapper.addEventListener("touchmove", wrapperTouchMoveHandler, {
+                // fix #3 #5
+                passive: false
+            }
+        );
+
+        wrapper.addEventListener("touchend", wrapperTouchEndHandler, false);
+
+        function eleTouchStartHandler (event) {
             // if (data.inertiaing) {
-             //   return;
+            //   return;
             // }
 
             var events = event.touches[0] || event;
@@ -103,28 +134,9 @@
             data.bound = ele.getBoundingClientRect();
 
             data.timerready = true;
-        });
-
-        // easeOutBounce算法
-        /*
-        * t: current time（当前时间）；
-         * b: beginning value（初始值）；
-         * c: change in value（变化量）；
-         * d: duration（持续时间）。
-        **/
-        var easeOutBounce = function (t, b, c, d) {
-            if ((t /= d) < (1 / 2.75)) {
-                return c * (7.5625 * t * t) + b;
-            } else if (t < (2 / 2.75)) {
-                return c * (7.5625 * (t -= (1.5 / 2.75)) * t + 0.75) + b;
-            } else if (t < (2.5 / 2.75)) {
-                return c * (7.5625 * (t -= (2.25 / 2.75)) * t + 0.9375) + b;
-            } else {
-                return c * (7.5625 * (t -= (2.625 / 2.75)) * t + 0.984375) + b;
-            }
         };
 
-        document.addEventListener('touchmove', function (event) {
+        function wrapperTouchMoveHandler (event) {
             if (data.touching !== true) {
                 return;
             }
@@ -166,17 +178,16 @@
             }
 
             // 元素位置跟随
-            var x = data.distanceX + distanceX, y = data.distanceY + distanceY;
+            var x = data.distanceX + distanceX,
+                y = data.distanceY + distanceY;
             fnTranslate(x, y);
 
             // 缓存移动位置
             ele.distanceX = x;
             ele.distanceY = y;
-        }, { // fix #3 #5
-            passive: false
-        });
+        }
 
-        document.addEventListener('touchend', function () {
+        function wrapperTouchEndHandler (event) {
             if (data.touching === false) {
                 // fix iOS fixed bug
                 return;
@@ -199,7 +210,8 @@
             }
 
             // 距离和时间
-            var distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY), time = data.timerend - data.timerstart;
+            var distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY),
+                time = data.timerend - data.timerstart;
 
             // 速度，每一个自然刷新此时移动的距离
             var speed = distance / time * 16.666;
@@ -213,7 +225,8 @@
             data.inertiaing = true;
 
             // 反弹的参数
-            var reverseX = 1, reverseY = 1;
+            var reverseX = 1,
+                reverseY = 1;
 
             // 速度计算法
             var step = function () {
@@ -224,7 +237,8 @@
                 speed = speed - speed / rate;
 
                 // 根据运动角度，分配给x, y方向
-                var moveX = reverseX * speed * distanceX / distance, moveY = reverseY * speed * distanceY / distance;
+                var moveX = reverseX * speed * distanceX / distance,
+                    moveY = reverseY * speed * distanceY / distance;
 
                 // 此时元素的各个数值
                 var bound = ele.getBoundingClientRect();
@@ -246,7 +260,8 @@
                     reverseY = -1 * reverseY;
                 }
 
-                var x = ele.distanceX + moveX, y = ele.distanceY + moveY;
+                var x = ele.distanceX + moveX,
+                    y = ele.distanceY + moveY;
                 // 位置变化
                 fnTranslate(x, y);
 
@@ -258,8 +273,8 @@
                     if (params.edge == false) {
                         data.inertiaing = false;
 
-                        if (win.localStorage) {
-                            localStorage['Inertia_' + ele.id] = [x, y].join();
+                        if (params.savePosition && win.localStorage) {
+                            localStorage["Inertia_" + ele.id] = [x, y].join();
                         }
                     } else {
                         // 边缘吸附
@@ -272,9 +287,12 @@
 
             var edge = function () {
                 // 时间
-                var start = 0, during = 25;
+                var start = 0,
+                    during = 25;
                 // 初始值和变化量
-                var init = ele.distanceX, y = ele.distanceY, change = 0;
+                var init = ele.distanceX,
+                    y = ele.distanceY,
+                    change = 0;
                 // 判断元素现在在哪个半区
                 var bound = ele.getBoundingClientRect();
                 if (bound.left + bound.width / 2 < winWidth / 2) {
@@ -301,17 +319,26 @@
                         ele.distanceY = y;
 
                         data.inertiaing = false;
-                        if (win.localStorage) {
-                           localStorage['Inertia_' + ele.id] = [x, y].join();
-                       }
+                        if (params.savePosition && win.localStorage) {
+                            localStorage["Inertia_" + ele.id] = [x, y].join();
+                        }
                     }
                 };
                 run();
             };
 
             step();
-        });
+        }
+
+        this.destory = function () {
+            ele.removeEventListener('touchstart', eleTouchStartHandler, false)
+            wrapper.removeEventListener('touchmove', wrapperTouchMoveHandler, false)
+            wrapper.removeEventListener('touchend', wrapperTouchEndHandler, false)
+
+            ele = null
+        }
+        return this
     };
 
     return Inertia;
-}));
+});
